@@ -1,0 +1,324 @@
+{
+  "name": "Unnamed Project",
+  "total_modules": 17,
+  "total_files": 0,
+  "modules": [
+    {
+      "name": "Match3",
+      "description": null,
+      "owners": [
+        "ivan.petrov@playrix.com",
+        "match3.lead@playrix.com"
+      ],
+      "paths": [
+        "src/Match3"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "App",
+      "description": "Основной модуль приложения, отвечающий за инициализацию, обновление и базовую функциональность",
+      "owners": [
+        "app.team@playrix.com"
+      ],
+      "paths": [
+        "src/App"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Cheats",
+      "description": "Отладочные инструменты и читы для тестирования",
+      "owners": [
+        "debug.team@playrix.com"
+      ],
+      "paths": [
+        "src/Cheats"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Common",
+      "description": "Общие компоненты и утилиты, используемые в разных частях приложения",
+      "owners": [
+        "framework.core@playrix.com"
+      ],
+      "paths": [
+        "src/Common"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "GFF",
+      "description": "Game Feature Framework - фреймворк для реализации игровых фич",
+      "owners": [
+        "game.features@playrix.com"
+      ],
+      "paths": [
+        "src/GFF"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "GameFeatures",
+      "description": "Реализация игровых механик и особенностей",
+      "owners": [
+        "game.features@playrix.com"
+      ],
+      "paths": [
+        "src/GameFeatures"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "GameInfo",
+      "description": "Информационная система игры и мета-данные",
+      "owners": [
+        "game.core@playrix.com"
+      ],
+      "paths": [
+        "src/GameInfo"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "GameMechanics",
+      "description": "Основные игровые механики и системы",
+      "owners": [
+        "game.mechanics@playrix.com"
+      ],
+      "paths": [
+        "src/GameMechanics"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "GameStory",
+      "description": "Сюжетная составляющая игры и связанные механики",
+      "owners": [
+        "game.story@playrix.com"
+      ],
+      "paths": [
+        "src/GameStory"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Migration",
+      "description": "Система миграции данных между версиями",
+      "owners": [
+        "app.team@playrix.com"
+      ],
+      "paths": [
+        "src/Migration"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Platforms",
+      "description": "Платформо-зависимый код и адаптеры",
+      "owners": [
+        "platform.team@playrix.com"
+      ],
+      "paths": [
+        "src/Platforms"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "PluginTest",
+      "description": "Тестирование плагинов и расширений",
+      "owners": [
+        "qa.team@playrix.com"
+      ],
+      "paths": [
+        "src/PluginTest"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Server",
+      "description": "Серверное взаимодействие и API",
+      "owners": [
+        "server.team@playrix.com"
+      ],
+      "paths": [
+        "src/Server"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Services",
+      "description": "Сервисная инфраструктура и утилиты",
+      "owners": [
+        "services.team@playrix.com"
+      ],
+      "paths": [
+        "src/Services"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Tests",
+      "description": "Тесты и тестовая инфраструктура",
+      "owners": [
+        "qa.team@playrix.com"
+      ],
+      "paths": [
+        "src/Tests"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "VSO",
+      "description": "Игровой движок VSO",
+      "owners": [
+        "engine.team@playrix.com"
+      ],
+      "paths": [
+        "src/VSO"
+      ],
+      "files": {},
+      "submodules": []
+    },
+    {
+      "name": "Framework",
+      "description": null,
+      "owners": [
+        "framework.lead@playrix.com",
+        "framework.team@playrix.com"
+      ],
+      "paths": [
+        "HSFramework"
+      ],
+      "files": {},
+      "submodules": [
+        {
+          "name": "Core",
+          "description": "Базовые компоненты и утилиты фреймворка",
+          "owners": [
+            "framework.core@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSCore"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "App",
+          "description": "Основные компоненты приложения",
+          "owners": [
+            "framework.app@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSApp"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Game",
+          "description": "Игровая логика и механики",
+          "owners": [
+            "framework.game@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSGame"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Events",
+          "description": "Система событий и обработка ивентов",
+          "owners": [
+            "framework.events@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSEvents"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Mechanics",
+          "description": "Игровые механики и системы",
+          "owners": [
+            "framework.mechanics@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSMechanics"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Visual",
+          "description": "Визуальные компоненты и рендеринг",
+          "owners": [
+            "framework.visual@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSVisual"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Utils",
+          "description": "Вспомогательные утилиты и инструменты",
+          "owners": [
+            "framework.utils@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSUtils"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Tracking",
+          "description": "Система аналитики и трекинга",
+          "owners": [
+            "framework.tracking@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSTracking"
+          ],
+          "files": {},
+          "submodules": []
+        },
+        {
+          "name": "Tests",
+          "description": "Модульные тесты фреймворка",
+          "owners": [
+            "framework.qa@playrix.com"
+          ],
+          "paths": [
+            "HSFramework/HSVsoUnitTests",
+            "HSFramework/HSUnitTests"
+          ],
+          "files": {},
+          "submodules": []
+        }
+      ]
+    }
+  ],
+  "root_directory": "../../"
+}

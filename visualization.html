@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Визуализация архитектуры проекта</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #visualization {
+            width: 100%;
+            height: 100%;
+            background-color: white;
+        }
+        
+        .node {
+            cursor: pointer;
+        }
+        
+        .node circle {
+            fill-opacity: 0.7;
+            stroke: steelblue;
+            stroke-width: 1px;
+        }
+        
+        .node text {
+            font: 12px sans-serif;
+            pointer-events: none;
+            text-anchor: middle;
+            font-weight: 500;
+            fill: #333;
+            text-shadow: 
+                -1px -1px 0 #fff,
+                1px -1px 0 #fff,
+                -1px 1px 0 #fff,
+                1px 1px 0 #fff;
+        }
+        
+        .project circle {
+            fill: #ffffff;
+            stroke-width: 2px;
+        }
+        
+        .module circle {
+            fill: #e8f4f8;
+        }
+        
+        .submodule circle {
+            fill: #f0f9ff;
+            stroke-width: 0.5px;
+        }
+        
+        .file circle {
+            fill: #f8fbfd;
+            stroke-width: 0.5px;
+        }
+        
+        .tooltip {
+            position: absolute;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            max-width: 300px;
+            z-index: 1000;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            margin: 0 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <button onclick="resetZoom()">Сбросить масштаб</button>
+        </div>
+        <div id="visualization"></div>
+    </div>
+
+    <script>
+        // Настройки визуализации
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        // Создаем SVG контейнер
+        const svg = d3.select("#visualization")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height);
+            
+        // Добавляем группу для зума
+        const g = svg.append("g");
+        
+        // Настраиваем зум
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+            
+        svg.call(zoom);
+        
+        // Создаем тултип
+        const tooltip = d3.select("#container")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+            
+        // Функция для преобразования данных в иерархическую структуру
+        function transformData(data) {
+            const root = {
+                name: data.project.name,
+                type: "project",
+                children: []
+            };
+            
+            data.modules.forEach(module => {
+                const moduleNode = {
+                    name: module.name,
+                    type: "module",
+                    value: module.files_count * 100,
+                    children: []
+                };
+                
+                // Рекурсивная функция для добавления подмодулей
+                function addSubmodules(parent, items) {
+                    items.forEach(item => {
+                        const node = {
+                            name: item.name,
+                            type: "submodule",
+                            value: item.files_count * 100,
+                            children: []
+                        };
+                        
+                        // Добавляем файлы подмодуля
+                        if (item.files) {
+                            item.files.forEach(file => {
+                                node.children.push({
+                                    name: file.name,
+                                    type: "file",
+                                    paths: file.paths,
+                                    value: 100
+                                });
+                            });
+                        }
+                        
+                        // Рекурсивно добавляем дочерние подмодули
+                        if (item.children) {
+                            addSubmodules(node, item.children);
+                        }
+                        
+                        parent.children.push(node);
+                    });
+                }
+                
+                // Добавляем подмодули
+                if (module.children) {
+                    addSubmodules(moduleNode, module.children);
+                }
+                
+                // Добавляем отдельные файлы
+                if (module.files) {
+                    module.files.forEach(file => {
+                        moduleNode.children.push({
+                            name: file.name,
+                            type: "file",
+                            paths: file.paths,
+                            value: 100
+                        });
+                    });
+                }
+                
+                root.children.push(moduleNode);
+            });
+            
+            return root;
+        }
+        
+        // Загружаем данные и создаем визуализацию
+        d3.json("result.json").then(data => {
+            const root = d3.hierarchy(transformData(data))
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+            
+            const pack = d3.pack()
+                .size([width * 0.9, height * 0.9])
+                .padding(d => {
+                    // Увеличиваем отступы между уровнями в зависимости от типа
+                    if (d.height === 0) return 3; // Файлы
+                    if (d.height === 1) return 5; // Подмодули
+                    return 10; // Модули и проект
+                });
+            
+            const nodes = pack(root);
+            
+            // Добавляем узлы
+            const node = g.selectAll(".node")
+                .data(nodes.descendants())
+                .enter()
+                .append("g")
+                .attr("class", d => `node ${d.data.type}`)
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            // Добавляем круги для узлов
+            node.append("circle")
+                .attr("r", d => d.r)
+                .on("mouseover", showTooltip)
+                .on("mousemove", moveTooltip)
+                .on("mouseout", hideTooltip);
+            
+            // Добавляем текст поверх всех кругов
+            g.selectAll(".node-text")
+                .data(nodes.descendants().filter(d => d.r > 15)) // Уменьшаем порог для текста
+                .enter()
+                .append("text")
+                .attr("class", "node-text")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .attr("dy", ".35em")
+                .style("font-size", d => {
+                    const size = Math.min(d.r * 0.4, 14);
+                    return (d.data.type === "submodule" ? size * 0.9 : size) + "px";
+                })
+                .text(d => d.data.name);
+        });
+        
+        function showTooltip(event, d) {
+            let content = `<strong>${d.data.name}</strong>`;
+            if (d.data.paths) {
+                content += "<br>Пути:<br>" + d.data.paths.join("<br>");
+            }
+            if (d.data.type !== "file") {
+                content += `<br>Количество файлов: ${d.value / 100}`;
+            }
+            
+            tooltip.html(content)
+                .style("opacity", 1)
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        }
+        
+        function moveTooltip(event) {
+            tooltip
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+        }
+        
+        function hideTooltip() {
+            tooltip.style("opacity", 0);
+        }
+        
+        function resetZoom() {
+            svg.transition().duration(750).call(
+                zoom.transform,
+                d3.zoomIdentity,
+                d3.zoomTransform(svg.node()).invert([width / 2, height / 2])
+            );
+        }
+        
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            svg
+                .attr("width", width)
+                .attr("height", height);
+            
+            // Перерисовываем визуализацию при изменении размера
+            const pack = d3.pack()
+                .size([width * 0.9, height * 0.9])
+                .padding(d => {
+                    // Увеличиваем отступы между уровнями в зависимости от типа
+                    if (d.height === 0) return 3; // Файлы
+                    if (d.height === 1) return 5; // Подмодули
+                    return 10; // Модули и проект
+                });
+            
+            const root = d3.hierarchy(transformData(data))
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+            
+            const nodes = pack(root);
+            
+            g.selectAll(".node")
+                .data(nodes.descendants())
+                .attr("transform", d => `translate(${d.x},${d.y})`);
+            
+            g.selectAll("circle")
+                .attr("r", d => d.r);
+            
+            g.selectAll(".node-text")
+                .data(nodes.descendants().filter(d => d.r > 15)) // Уменьшаем порог для текста
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
+                .style("font-size", d => {
+                    const size = Math.min(d.r * 0.4, 14);
+                    return (d.data.type === "submodule" ? size * 0.9 : size) + "px";
+                });
+        });
+    </script>
+</body>
+</html> 

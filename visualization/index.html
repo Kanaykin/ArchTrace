@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Architecture Visualization</title>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        #graph {
+            width: 100%;
+            height: 100vh;
+            background-color: white;
+        }
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .module-info {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            width: 300px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .search-box {
+            width: 200px;
+            padding: 5px;
+            margin: 5px;
+        }
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+        .legend {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 3px;
+        }
+    </style>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/force-graph"></script>
+</head>
+<body>
+    <div class="controls">
+        <input type="text" class="search-box" placeholder="Search modules..." onkeyup="searchNodes(this.value)">
+        <button onclick="resetCamera()">Reset View</button>
+        <button onclick="toggleLabels()">Toggle Labels</button>
+    </div>
+    <div class="module-info">
+        <h3>Module Details</h3>
+        <p class="module-description"></p>
+        <p class="module-owners"></p>
+        <p class="module-files-count"></p>
+        <div class="file-list"></div>
+    </div>
+    <div id="graph"></div>
+    <div class="legend"></div>
+
+    <script>
+        const graphData = {"nodes": [{"id": "Match3", "name": "Match3", "description": "No description", "owners": ["ivan.petrov@playrix.com", "match3.lead@playrix.com"], "files": {}, "weight": 40, "color": "#f27979", "submodules": []}, {"id": "App", "name": "App", "description": "\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 \u043c\u043e\u0434\u0443\u043b\u044c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f, \u043e\u0442\u0432\u0435\u0447\u0430\u044e\u0449\u0438\u0439 \u0437\u0430 \u0438\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044e, \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0438 \u0431\u0430\u0437\u043e\u0432\u0443\u044e \u0444\u0443\u043d\u043a\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c", "owners": ["app.team@playrix.com"], "files": {}, "weight": 40, "color": "#799cf2", "submodules": []}, {"id": "Cheats", "name": "Cheats", "description": "\u041e\u0442\u043b\u0430\u0434\u043e\u0447\u043d\u044b\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u044b \u0438 \u0447\u0438\u0442\u044b \u0434\u043b\u044f \u0442\u0435\u0441\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f", "owners": ["debug.team@playrix.com"], "files": {}, "weight": 40, "color": "#bff279", "submodules": []}, {"id": "Common", "name": "Common", "description": "\u041e\u0431\u0449\u0438\u0435 \u043a\u043e\u043c\u043f\u043e\u043d\u0435\u043d\u0442\u044b \u0438 \u0443\u0442\u0438\u043b\u0438\u0442\u044b, \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c\u044b\u0435 \u0432 \u0440\u0430\u0437\u043d\u044b\u0445 \u0447\u0430\u0441\u0442\u044f\u0445 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f", "owners": ["framework.core@playrix.com"], "files": {}, "weight": 40, "color": "#f279e3", "submodules": []}, {"id": "GFF", "name": "GFF", "description": "Game Feature Framework - \u0444\u0440\u0435\u0439\u043c\u0432\u043e\u0440\u043a \u0434\u043b\u044f \u0440\u0435\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u0438 \u0438\u0433\u0440\u043e\u0432\u044b\u0445 \u0444\u0438\u0447", "owners": ["game.features@playrix.com"], "files": {}, "weight": 40, "color": "#79f2dd", "submodules": []}, {"id": "GameFeatures", "name": "GameFeatures", "description": "\u0420\u0435\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0438\u0433\u0440\u043e\u0432\u044b\u0445 \u043c\u0435\u0445\u0430\u043d\u0438\u043a \u0438 \u043e\u0441\u043e\u0431\u0435\u043d\u043d\u043e\u0441\u0442\u0435\u0439", "owners": ["game.features@playrix.com"], "files": {}, "weight": 40, "color": "#f2ba79", "submodules": []}, {"id": "GameInfo", "name": "GameInfo", "description": "\u0418\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u043e\u043d\u043d\u0430\u044f \u0441\u0438\u0441\u0442\u0435\u043c\u0430 \u0438\u0433\u0440\u044b \u0438 \u043c\u0435\u0442\u0430-\u0434\u0430\u043d\u043d\u044b\u0435", "owners": ["game.core@playrix.com"], "files": {}, "weight": 40, "color": "#9779f2", "submodules": []}, {"id": "GameMechanics", "name": "GameMechanics", "description": "\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u0438\u0433\u0440\u043e\u0432\u044b\u0435 \u043c\u0435\u0445\u0430\u043d\u0438\u043a\u0438 \u0438 \u0441\u0438\u0441\u0442\u0435\u043c\u044b", "owners": ["game.mechanics@playrix.com"], "files": {}, "weight": 40, "color": "#7ef279", "submodules": []}, {"id": "GameStory", "name": "GameStory", "description": "\u0421\u044e\u0436\u0435\u0442\u043d\u0430\u044f \u0441\u043e\u0441\u0442\u0430\u0432\u043b\u044f\u044e\u0449\u0430\u044f \u0438\u0433\u0440\u044b \u0438 \u0441\u0432\u044f\u0437\u0430\u043d\u043d\u044b\u0435 \u043c\u0435\u0445\u0430\u043d\u0438\u043a\u0438", "owners": ["game.story@playrix.com"], "files": {}, "weight": 40, "color": "#f279a1", "submodules": []}, {"id": "Migration", "name": "Migration", "description": "\u0421\u0438\u0441\u0442\u0435\u043c\u0430 \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u0438 \u0434\u0430\u043d\u043d\u044b\u0445 \u043c\u0435\u0436\u0434\u0443 \u0432\u0435\u0440\u0441\u0438\u044f\u043c\u0438", "owners": ["app.team@playrix.com"], "files": {}, "weight": 40, "color": "#79c4f2", "submodules": []}, {"id": "Platforms", "name": "Platforms", "description": "\u041f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u043e-\u0437\u0430\u0432\u0438\u0441\u0438\u043c\u044b\u0439 \u043a\u043e\u0434 \u0438 \u0430\u0434\u0430\u043f\u0442\u0435\u0440\u044b", "owners": ["platform.team@playrix.com"], "files": {}, "weight": 40, "color": "#e8f279", "submodules": []}, {"id": "PluginTest", "name": "PluginTest", "description": "\u0422\u0435\u0441\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u043f\u043b\u0430\u0433\u0438\u043d\u043e\u0432 \u0438 \u0440\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0439", "owners": ["qa.team@playrix.com"], "files": {}, "weight": 40, "color": "#d879f2", "submodules": []}, {"id": "Server", "name": "Server", "description": "\u0421\u0435\u0440\u0432\u0435\u0440\u043d\u043e\u0435 \u0432\u0437\u0430\u0438\u043c\u043e\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 API", "owners": ["server.team@playrix.com"], "files": {}, "weight": 40, "color": "#79f2b5", "submodules": []}, {"id": "Services", "name": "Services", "description": "\u0421\u0435\u0440\u0432\u0438\u0441\u043d\u0430\u044f \u0438\u043d\u0444\u0440\u0430\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430 \u0438 \u0443\u0442\u0438\u043b\u0438\u0442\u044b", "owners": ["services.team@playrix.com"], "files": {}, "weight": 40, "color": "#f29279", "submodules": []}, {"id": "Tests", "name": "Tests", "description": "\u0422\u0435\u0441\u0442\u044b \u0438 \u0442\u0435\u0441\u0442\u043e\u0432\u0430\u044f \u0438\u043d\u0444\u0440\u0430\u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0430", "owners": ["qa.team@playrix.com"], "files": {}, "weight": 40, "color": "#7983f2", "submodules": []}, {"id": "VSO", "name": "VSO", "description": "\u0418\u0433\u0440\u043e\u0432\u043e\u0439 \u0434\u0432\u0438\u0436\u043e\u043a VSO", "owners": ["engine.team@playrix.com"], "files": {}, "weight": 40, "color": "#a6f279", "submodules": []}, {"id": "Framework", "name": "Framework", "description": "No description", "owners": ["framework.lead@playrix.com", "framework.team@playrix.com"], "files": {}, "weight": 40, "color": "#f279ca", "submodules": []}], "links": []};
+        let showLabels = true;
+
+        // Создаем граф
+        const Graph = ForceGraph()
+            (document.getElementById('graph'))
+            .graphData(graphData)
+            .nodeId('id')
+            .nodeVal('weight')
+            .nodeLabel('name')
+            .nodeColor('color')
+            .linkWidth('weight')
+            .linkColor(link => link.submodule_link ? '#ff000044' : '#cccccc')
+            .linkWidth(link => link.submodule_link ? 1 : link.weight)
+            .linkDirectionalArrowLength(link => link.submodule_link ? 4 : 0)
+            .linkDirectionalArrowRelPos(1)
+            .linkCurvature(link => link.submodule_link ? 0.2 : 0)
+            .onNodeDragEnd(node => {
+                node.fx = node.x;
+                node.fy = node.y;
+            })
+            .nodeCanvasObject((node, ctx, globalScale) => {
+                const label = node.name;
+                const fontSize = 12/globalScale;
+                ctx.font = `${fontSize}px Sans-Serif`;
+                const textWidth = ctx.measureText(label).width;
+                const radius = Math.sqrt(node.weight) * 4;
+
+                // Рисуем основной модуль
+                ctx.beginPath();
+                ctx.fillStyle = node.color;
+                ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+                ctx.fill();
+
+                // Если у модуля есть подмодули и он развернут
+                if (expandedNodes.has(node.id) && node.submodules && node.submodules.length > 0) {
+                    drawSubmodules(ctx, node.x, node.y, radius, node.submodules, 0, globalScale);
+                } else if (node.submodules && node.submodules.length > 0) {
+                    // Показываем индикатор наличия подмодулей
+                    ctx.beginPath();
+                    ctx.fillStyle = '#666';
+                    ctx.arc(node.x + radius * 0.7, node.y - radius * 0.7, radius * 0.2, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(node.submodules.length.toString(), node.x + radius * 0.7, node.y - radius * 0.7);
+                }
+
+                // Добавляем метку основного модуля
+                if (showLabels) {
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(label, node.x, node.y + radius + fontSize);
+                }
+            })
+            .onNodeClick((node, event) => {
+                if (event.shiftKey) { // Shift+клик для переключения развернутости
+                    if (expandedNodes.has(node.id)) {
+                        expandedNodes.delete(node.id);
+                    } else {
+                        expandedNodes.add(node.id);
+                    }
+                    Graph.refresh();
+                } else {
+                    showModuleInfo(node);
+                }
+            });
+
+        // Функции управления
+        function resetCamera() {
+            Graph.zoomToFit(400);
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            Graph.refresh();
+        }
+
+        function searchNodes(query) {
+            const nodes = Graph.graphData().nodes;
+            if (!query) {
+                nodes.forEach(node => {
+                    node.color = node.__originalColor || node.color;
+                    if (node.submodules) {
+                        node.submodules.forEach(sub => {
+                            sub.color = sub.__originalColor || sub.color;
+                        });
+                    }
+                });
+            } else {
+                query = query.toLowerCase();
+                nodes.forEach(node => {
+                    if (!node.__originalColor) node.__originalColor = node.color;
+                    const match = node.name.toLowerCase().includes(query);
+                    node.color = match ? '#ff7f0e' : '#cccccc';
+
+                    if (node.submodules) {
+                        node.submodules.forEach(sub => {
+                            if (!sub.__originalColor) sub.__originalColor = sub.color;
+                            const subMatch = sub.name.toLowerCase().includes(query);
+                            sub.color = subMatch ? '#ff7f0e' : '#cccccc';
+                        });
+                    }
+                });
+            }
+            Graph.refresh();
+        }
+
+        function showModuleInfo(node) {
+            const info = document.querySelector('.module-info');
+            info.style.display = 'block';
+            
+            info.querySelector('.module-description').textContent = 
+                node.description || 'No description';
+            
+            info.querySelector('.module-owners').textContent = 
+                'Owners: ' + (node.owners ? node.owners.join(', ') : 'None');
+            
+            const totalFiles = node.files ? Object.keys(node.files).length : 0;
+            const submoduleFiles = node.submodules ? 
+                node.submodules.reduce((sum, sub) => sum + Object.keys(sub.files || {}).length, 0) : 0;
+            
+            info.querySelector('.module-files-count').textContent = 
+                `Files: ${totalFiles} (${submoduleFiles} in submodules)`;
+            
+            const fileList = info.querySelector('.file-list');
+            fileList.innerHTML = '';
+            
+            if (node.files) {
+                const mainFiles = document.createElement('div');
+                mainFiles.innerHTML = '<strong>Main module files:</strong>';
+                Object.keys(node.files).forEach(file => {
+                    const div = document.createElement('div');
+                    div.textContent = file;
+                    mainFiles.appendChild(div);
+                });
+                fileList.appendChild(mainFiles);
+            }
+            
+            if (node.submodules) {
+                node.submodules.forEach(sub => {
+                    if (sub.files) {
+                        const subFiles = document.createElement('div');
+                        subFiles.innerHTML = `<strong>${sub.name} files:</strong>`;
+                        Object.keys(sub.files).forEach(file => {
+                            const div = document.createElement('div');
+                            div.textContent = file;
+                            subFiles.appendChild(div);
+                        });
+                        fileList.appendChild(subFiles);
+                    }
+                });
+            }
+        }
+
+        // Создаем легенду
+        const modules = [...new Set(graphData.nodes.map(n => n.name))];
+        const legend = document.querySelector('.legend');
+        modules.forEach(module => {
+            const node = graphData.nodes.find(n => n.name === module);
+            if (!node.parent) {  // Показываем только основные модули
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                item.innerHTML = `
+                    <div class="legend-color" style="background: ${node.color}"></div>
+                    <div>${module}</div>
+                `;
+                legend.appendChild(item);
+            }
+        });
+
+        // Добавим состояние развернутости для модулей
+        let expandedNodes = new Set();
+
+        // Начальная подгонка графа под размер экрана
+        setTimeout(() => {
+            Graph.zoomToFit(400);
+        }, 500);
+
+        // Изменим функцию отрисовки подмодулей, чтобы она поддерживала вложенность
+        function drawSubmodules(ctx, parentX, parentY, parentRadius, submodules, level = 0, globalScale) {
+            const maxLevels = 3; // Максимальная глубина отображения
+            if (level >= maxLevels) return;
+            
+            const subRadius = Math.min(
+                parentRadius * (0.4 - level * 0.1), // Уменьшаем размер с каждым уровнем
+                Math.sqrt(20) * 3
+            );
+            
+            submodules.forEach((submodule, idx) => {
+                const angleOffset = level * Math.PI / 8; // Смещаем угол для разных уровней
+                const angle = angleOffset + (2 * Math.PI * idx) / submodules.length;
+                const distance = parentRadius * (0.7 + level * 0.2); // Увеличиваем расстояние с каждым уровнем
+                
+                const x = parentX + Math.cos(angle) * distance;
+                const y = parentY + Math.sin(angle) * distance;
+                
+                // Рисуем подмодуль
+                ctx.beginPath();
+                ctx.fillStyle = submodule.color;
+                ctx.arc(x, y, subRadius, 0, 2 * Math.PI, false);
+                ctx.fill();
+                
+                // Белая обводка
+                ctx.beginPath();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2 - level * 0.5; // Уменьшаем толщину обводки с уровнем
+                ctx.arc(x, y, subRadius, 0, 2 * Math.PI, false);
+                ctx.stroke();
+                
+                // Линия к родителю
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(204, 204, 204, ${1 - level * 0.2})`; // Уменьшаем непрозрачность с уровнем
+                ctx.lineWidth = 1;
+                ctx.moveTo(parentX, parentY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                
+                // Метка при достаточном приближении
+                if (globalScale > 0.7 + level * 0.3) { // Требуем большего приближения для глубоких уровней
+                    ctx.fillStyle = 'black';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const parts = submodule.name.split('/');
+                    ctx.fillText(parts[parts.length - 1], x, y);
+                }
+                
+                // Рекурсивно отрисовываем подмодули текущего подмодуля
+                if (submodule.submodules) {
+                    drawSubmodules(ctx, x, y, subRadius, submodule.submodules, level + 1, globalScale);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
