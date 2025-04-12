@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import random
 
-from .deserializer import JsonDeserializer
+from deserializer import JsonDeserializer
 
 # Настройка логирования
 logging.basicConfig(

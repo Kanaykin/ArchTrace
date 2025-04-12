@@ -8,17 +8,16 @@ import sys
 import logging
 from datetime import datetime
 
-from .project import Project
-from .module import Module
-from .file_info import FileInfo
-from .visitors import TextVisitor, JsonVisitor, DetailedTextVisitor
+from project import Project
+from module import Module
+from file_info import FileInfo
+from visitors import TextVisitor, JsonVisitor, DetailedTextVisitor
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(f'arch_trace_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
         logging.StreamHandler()
     ]
 )
@@ -124,6 +123,9 @@ def main():
     parser.add_argument("--format", choices=["text", "json", "detailed"], default="text", 
                       help="Output format (text=simple format, detailed=detailed format, json=JSON format)")
     parser.add_argument("--output", help="Output file path")
+    
+    # Отладочный вывод
+    print("sys.argv:", sys.argv)
     
     args = parser.parse_args()
     logging.info(f"Аргументы командной строки: {args}")

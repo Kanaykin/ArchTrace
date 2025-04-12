@@ -1,0 +1,7 @@
+README.md
+setup.py
+ArchTrace.egg-info/PKG-INFO
+ArchTrace.egg-info/SOURCES.txt
+ArchTrace.egg-info/dependency_links.txt
+ArchTrace.egg-info/entry_points.txt
+ArchTrace.egg-info/top_level.txt

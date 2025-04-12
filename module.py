@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Set
 from pathlib import Path
 
-from .file_info import FileInfo
+from file_info import FileInfo
 import logging
 
 

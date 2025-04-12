@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run ArchTrace",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/main.py",
+        "args": ["files", "--format=json", "--output=result.json"],
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}",
+        "env": {
+            "PYTHONPATH": "${workspaceFolder}"
+        },
+        "justMyCode": false
+      }
+    ]
+  }
+  

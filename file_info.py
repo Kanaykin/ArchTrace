@@ -20,8 +20,7 @@ class FileInfo:
     
     def add_path(self, path: Path) -> None:
         """Добавляет путь к файлу с тем же именем"""
-        if path.stem == self.name:
-            self.paths.add(path)
+        self.paths.add(path)
     
     def __hash__(self) -> int:
         """Хеш для использования в множествах"""

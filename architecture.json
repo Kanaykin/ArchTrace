@@ -1,6 +1,6 @@
 {
   "project": "Homescapes",
-  "root_directory": "../../",
+  "root_directory": "/Users/sergeykanaykin/Documents/Work/homescapes",
   "modules": [
     {
       "name": "Match3",

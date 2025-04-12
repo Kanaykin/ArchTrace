@@ -5,9 +5,9 @@ from pathlib import Path
 import json
 import logging
 
-from .project import Project
-from .module import Module
-from .file_info import FileInfo
+from project import Project
+from module import Module
+from file_info import FileInfo
 
 
 class JsonDeserializer:

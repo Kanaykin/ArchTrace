@@ -4,8 +4,8 @@ from typing import List, Optional, Dict, Set
 from pathlib import Path
 import json
 
-from .module import Module
-from .file_info import FileInfo
+from module import Module
+from file_info import FileInfo
 
 
 @dataclass
