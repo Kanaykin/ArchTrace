@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graph Visualization</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%; /* Устанавливаем высоту окна */
+      overflow: hidden; /* Удаляем прокрутку */
+      font-family: Arial, sans-serif;
+      display: flex; /* Flex-контейнер для всей страницы */
+      flex-direction: column; /* Вертикальная компоновка */
+    }
+
+    ul.custom-list {
+      margin: 5px 0;
+      padding: 0 0 0 10px;
+      list-style-type: none;
+    }
+
+    ul.custom-list li {
+      font-size: 14px;           /* Маленький текст */
+      white-space: nowrap;       /* Не переносить строки */
+      overflow: hidden;          /* Обрезать лишний текст */
+      text-overflow: ellipsis;   /* Добавить троеточие в конце */
+      padding: 3px 0;            /* Минимальные отступы сверху и снизу */
+      margin: 0;                 /* Убираем внешние отступы */
+    }
+
+    /* Основной контейнер для всей страницы */
+    #main-container {
+      display: flex; /* Flex-контейнер для трёх колонок */
+      flex-grow: 1; /* Занимает всё доступное пространство */
+      height: 100%;
+    }
+    /* Панель инструментов слева */
+    #toolbar {
+      padding: 10px;
+      padding-bottom: 30px;
+      background: #f4f4f4;
+      border-right: 1px solid #ddd;
+      display: flex; /* Flex для выравнивания элементов внутри */
+      flex-direction: column;
+      gap: 15px; /* Отступы между элементами панели */
+      min-width: 300px;
+      max-width: 300px;
+      overflow: auto; /* Прокрутка содержимого, если панель переполнена */
+      box-sizing: border-box; /* Учитываем padding */
+    }
+    /* Правая панель коммитов */
+    #commit-toolbar {
+      padding: 10px;
+      padding-bottom: 30px;
+      background: #eaeaea;
+      border-left: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 350px;
+      max-width: 350px;
+      box-sizing: border-box;
+      overflow-y: auto; /* Прокрутка при переполнении */
+      height: 100%; /* Равняется высоте родителя */
+    }
+    .legend {
+      margin-top: 20px;
+      flex-grow: 1; /* Легенда растягивается в зависимости от свободного пространства */
+      max-height: 100%; /* Ограничиваем её высоту */
+      overflow-y: auto; /* Включаем вертикальную прокрутку */
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+    .legend-color {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+    }
+
+    /* Центр - область для графа */
+    #graph-container {
+      flex-grow: 1; /* Занимает всё оставшееся пространство */
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    svg {
+      flex-grow: 1;
+      width: 100%;
+      height: 100vh;
+      display: block; /* Убираем лишние промежутки вокруг SVG */
+    }
+    #status-bar {
+      background: #e0e0e0;
+      color: #333;
+      padding: 5px 10px;
+      font-size: 14px;
+      border-top: 1px solid #ccc;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+      position: fixed; /* Фиксируем статус-бар снизу страницы */
+      bottom: 0;
+      left: 0;
+      width: 100%; /* Статус-бар занимает ширину всей страницы */
+      box-sizing: border-box;
+    }
+    .highlight {
+      stroke: red;
+      stroke-width: 2;
+    }
+    .dimmed {
+      opacity: 0.2;
+    }
+    #commit-list li {
+      margin-bottom: 3px;
+      padding: 3px 5px;
+    }
+
+    #commit-list li a {
+      text-decoration: none;
+      color: #0073e6;
+    }
+
+    #commit-list li a:hover {
+      color: #005bb5;
+    }
+
+    #commit-list li[multiple-modules="true"] {
+      background-color: #ffe4e1;  /* Светло-розовый фон */
+      border: 1px solid #ff6f61; /* Красная рамка */
+      border-radius: 4px;
+      padding: 5px;
+    }
+
+    #tooltip {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      pointer-events: all;
+      font-size: 12px;
+      visibility: hidden;
+      z-index: 100;
+      max-width: 300px; /* Ограничиваем ширину */
+      word-wrap: break-word; /* Перенос слов */
+      box-sizing: border-box; /* Учёт padding при подсчёте ширины */
+    }
+    .pie-chart path {
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="main-container">
+<div id="toolbar">
+  <div>
+    <label for="threshold">Threshold (Link Weight):</label>
+    <input id="threshold" type="range" min="0" max="10" step="0.1" value="1">
+    <input id="threshold-value" type="number" step="0.1" min="0" max="10" value="1">
+  </div>
+
+  <div>
+    <label for="min-node-size">Min Node Size to Show Name:</label>
+    <input id="min-node-size" type="range" min="5" max="31" value="10">
+    <span id="min-node-size-value">10</span>
+  </div>
+
+  <div>
+    <label for="enable-pie-chart">
+      <input id="enable-pie-chart" type="checkbox">
+      Show Team Contribution Pie
+    </label>
+  </div>
+
+  <div>
+    <label for="enable-commit-time">
+      <input id="enable-commit-time" type="checkbox">
+      Commit time opacity
+    </label>
+  </div>
+
+  <div>
+    <div id="filters">
+      <select id="team-filter">
+        <option value="all">All Teams</option>
+        <!-- Сюда программа добавляет команды -->
+      </select>
+      <select id="member-filter" style="display: none;">
+        <option value="all">All Members</option>
+        <!-- Сюда программа добавляет участников выбранной команды -->
+      </select>
+    </div>
+  </div>
+
+  <input id="file-search" type="text" placeholder="Search file by name" />
+
+  <div class="legend">
+    <strong>Legend:</strong>
+    <div id="legend-container"></div>
+  </div>
+</div>
+
+<!-- Центральный блок с графом -->
+<div id="graph-container">
+  <svg></svg>
+</div>
+
+<!-- Правая панель коммитов -->
+<div id="commit-toolbar">
+  <strong>Commits for Selected Node:</strong>
+  <div id="commit-list">Select a node to see its commits here.</div>
+</div>
+  <div id="tooltip" style="
+  position: absolute;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  pointer-events: none;
+  font-size: 12px;
+  visibility: hidden;
+  z-index: 100;
+"></div>
+</div>
+
+<div id="status-bar">
+  <button onclick="window.location.href='index.html';" style="padding: 5px 10px; background-color: #0073e6; color: white; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+    Go to Home
+  </button>
+  <span id="file-info-text">Click on a node to see the full path here.</span>
+
+</div>
+<script>
+  // Подставляем данные графа через {{GRAPH_DATA}}
+  const graph = {{GRAPH_DATA}};
+
+  const moduleColors = graph.modules;
+  const thresholdInput = document.getElementById("threshold");
+  const thresholdText = document.getElementById("threshold-value");
+  const minNodeSizeInput = document.getElementById("min-node-size");
+  const minNodeSizeValue = document.getElementById("min-node-size-value");
+  const fileSearchInput = document.getElementById("file-search");
+  const fileInfo = document.getElementById("file-info-text");
+  const legendContainer = document.getElementById("legend-container");
+  const commitList = document.getElementById("commit-list");
+
+  let threshold = parseFloat(thresholdInput.value);
+  let minNodeVisibleSize = parseInt(minNodeSizeInput.value);
+
+  const svg = d3.select('svg');
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  const svgZoom = svg.call(
+          d3.zoom()
+                  .scaleExtent([0.2, 5])
+                  .on("zoom", (event) => {
+                    svgGroup.attr("transform", event.transform);
+                  })
+  );
+  // Обработчики событий для перетаскивания узлов
+  function dragStarted(event, d) {
+    tooltip.style.visibility = "hidden"
+    if (!event.active) simulation.alphaTarget(0.3).restart(); // Запуск симуляции
+    d.fx = d.x; // Фиксируем узел по x
+    d.fy = d.y; // Фиксируем узел по y
+  }
+
+  function dragged(event, d) {
+    d.fx = event.x; // Обновляем x на текущую позицию
+    d.fy = event.y; // Обновляем y на текущую позицию
+    tooltip.style.visibility = "hidden";
+  }
+
+  function dragEnded(event, d) {
+    if (!event.active) simulation.alphaTarget(0); // Остановка симуляции
+    d.fx = null; // Снимаем фиксацию по x
+    d.fy = null; // Снимаем фиксацию по y
+  }
+
+  const svgGroup = svg.append("g");
+
+  function highlightModuleNodes(moduleName) {
+    // Находим узлы, относящиеся к указанному модулю
+    const relatedNodes = new Set(graph.nodes.filter(node => node.module === moduleName).map(node => node.id));
+
+    // Подсвечиваем только узлы, относящиеся к модулю
+    node
+            .attr("fill", d => relatedNodes.has(d.id) ? d.color : "#d3d3d3") // Подсвечиваем только узлы модуля
+            .attr("stroke", d => relatedNodes.has(d.id) ? "red" : "#aaaaaa") // Подсвечиваем рамку выбранных узлов
+            .attr("stroke-opacity", 1)
+
+
+    // Подсвечиваем только связи между узлами выбранного модуля
+    link
+            .attr("stroke", d => relatedNodes.has(d.source.id) && relatedNodes.has(d.target.id) ? "red" : "#d3d3d3") // Подсвечиваем только связи в модуле
+            .attr("stroke-width", d => relatedNodes.has(d.source.id) && relatedNodes.has(d.target.id) ? Math.sqrt(d.weight) : 1);
+
+    // Отображаем только метки узлов выбранного модуля
+    labels
+            .style("display", d => relatedNodes.has(d.id) ? "block" : "none");
+  }
+  // Генерация легенды с гиперссылками
+  moduleColors.forEach(module => {
+    const legendItem = document.createElement("div");
+    legendItem.className = "legend-item";
+
+    const legendColor = document.createElement("div");
+    legendColor.className = "legend-color";
+    legendColor.style.background = module.color;
+
+    const legendLink = document.createElement("a");
+    if ( module.module !== "Current" )
+      legendLink.href = `${module.module}.html`; // Указываем ссылку на модульный файл (например, "ИмяМодуля.html")
+    legendLink.textContent = module.module;   // Устанавливаем текст ссылки
+    legendLink.style.textDecoration = "none"; // Убираем подчеркивание для ссылки
+    legendLink.style.color = "inherit";       // Устанавливаем цвет текста как у родителя
+    legendLink.addEventListener("mouseenter", () => {
+      highlightModuleNodes(module.module); // Подсветить ноды с этим модулем
+    });
+
+    // Обработчик события снятия мыши (возвращаем исходное состояние)
+    legendLink.addEventListener("mouseleave", () => {
+      resetHighlight(); // Убираем подсветку
+    });
+
+    legendItem.appendChild(legendColor);
+    legendItem.appendChild(legendLink); // Добавляем ссылку вместо простого текста
+    legendContainer.appendChild(legendItem);
+  });
+
+  // Определяем минимальный и максимальный вес
+  const minWeight = d3.min(graph.nodes, d => d.weight);
+  maxWeight = d3.max(graph.nodes, d => d.weight);
+
+  console.log(minWeight, maxWeight);
+
+  // Масштаб радиуса узлов
+  const nodeRadiusScale = d3.scaleLinear()
+          .domain([minWeight, maxWeight])
+          .range([5, 30]); // Диапазон радиусов (от маленького до большого)
+
+  const simulation = d3.forceSimulation(graph.nodes)
+          .force("link", d3.forceLink(graph.links).id(d => d.id)
+                  .distance(link => 30 / (link.weight) )
+                  .strength(link => link.weight * 0.1))
+          .force("charge", d3.forceManyBody().strength(-50).distanceMax(400))
+          .force("center", d3.forceCenter((width - 200) / 2, height / 2))
+          .force("collide", d3.forceCollide().radius(d => nodeRadiusScale(d.weight)));
+
+  const link = svgGroup.append("g")
+          .attr("class", "links")
+          .selectAll("line")
+          .data(graph.links)
+          .enter()
+          .append("line")
+          .attr("stroke", "#999")
+          .attr("stroke-opacity", link => 0.6  * link.commit_time_normalized * link.commit_time_normalized || 1)
+          .attr("stroke-width", d => Math.sqrt(d.weight));
+
+  function populateTeamFilter() {
+    const teamFilter = document.getElementById("team-filter");
+
+    // Получаем уникальные команды из графа
+    const teams = graph.teams.map(team => team.name);
+
+    // Добавляем команды в выпадающий список
+    teams.forEach(team => {
+      const option = document.createElement("option");
+      option.value = team;
+      option.textContent = team;
+      teamFilter.appendChild(option);
+    });
+
+  }
+
+  // Вызов функции при загрузке
+  populateTeamFilter();
+  function generateTeamColor(teamName) {
+    // Хэшируем строку в число
+    let hash = 0;
+    for (let i = 0; i < teamName.length; i++) {
+      hash = teamName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    // Преобразуем хэш в Hue (0-360)
+    const hue = Math.abs(hash) % 360;
+
+    // Возвращаем цвет в HSL, с фиксированным насыщением (60%) и яркостью (80%)
+    return `hsl(${hue}, 70%, 70%)`;
+  }
+  function createTeamElementWithTooltip(teamName, members) {
+    const teamDiv = document.createElement("div");
+    teamDiv.style.padding = "5px";
+    teamDiv.style.marginBottom = "8px";
+    teamDiv.style.backgroundColor = generateTeamColor(teamName);
+    teamDiv.style.borderRadius = "4px";
+    teamDiv.style.position = "relative";
+
+    // Создаём ссылку
+    const teamLink = document.createElement("a");
+    teamLink.href = `${teamName}.html`;
+    teamLink.textContent = `[${teamName}]`;    // Текст внутри ссылки
+    teamLink.style.color = "inherit";         // Унаследовать цвет от div
+    teamLink.style.textDecoration = "none";   // Убираем подчеркивание
+    teamLink.style.display = "block";         // Ссылка занимает весь div
+    teamLink.style.height = "100%";
+
+// Добавляем ссылку в div
+    teamDiv.appendChild(teamLink);
+
+
+    // Добавляем обработчики событий для тултипа
+    teamDiv.addEventListener("mouseenter", (event) => {
+      const tooltip = document.getElementById("tooltip"); // Элемент тултипа
+      if (!tooltip) return; // Если тултип не найден, выходим
+
+      // Собираем список участников команды
+      const teamMembers = members.map(member => member.name || "Unknown").join("<br>");
+
+      tooltip.innerHTML = `<strong>Team Members:</strong><br>${teamMembers || "No members found"}`;
+      tooltip.style.visibility = "visible";
+    });
+
+    teamDiv.addEventListener("mousemove", (event) => {
+      const tooltip = document.getElementById("tooltip"); // Элемент тултипа
+      if (!tooltip) return; // Если тултип не найден, выходим
+
+      tooltip.style.left = `${event.pageX + 15}px`; // Расположение тултипа справа от курсора
+      tooltip.style.top = `${event.pageY}px`; // Расположение тултипа на уровне курсора
+    });
+
+    teamDiv.addEventListener("mouseleave", () => {
+      const tooltip = document.getElementById("tooltip"); // Элемент тултипа
+      if (!tooltip) return; // Если тултип не найден, выходим
+
+      tooltip.style.visibility = "hidden";
+    });
+
+    return teamDiv;
+  }
+  function updateCommitToolbar(selectedNode = null) {
+    // Очистка содержимого панели
+    commitList.innerHTML = "";
+
+    if (!selectedNode) {
+      // Если узел не выбран — отображаем перечень всех команд
+      const groupedTeams = graph.teams || []; // Теперь команды берутся из graph.teams
+
+      groupedTeams.forEach((team) => {
+        // Создаём элемент команды с тултипом
+        const teamDiv = createTeamElementWithTooltip(team.name, team.members);
+        commitList.appendChild(teamDiv); // Добавляем в DOM
+      });
+
+      return;
+    }
+
+    // Если узел выбран, отображаем связанные коммиты
+    showCommits(selectedNode);
+  }
+  function showCommits(selectedNode) {
+    // Очистка панели
+    commitList.innerHTML = "";
+
+    // Извлекаем модуль выбранного узла
+    const nodeModule = selectedNode.module;
+
+    // Соседние узлы
+    const adjacentNodes = new Set(
+            graph.links
+                    .filter((link) => link.source.id === selectedNode.id || link.target.id === selectedNode.id)
+                    .map((link) => (link.source.id === selectedNode.id ? link.target : link.source))
+    );
+    console.log("Соседние узлы:", adjacentNodes.size);
+
+    const maxModules = 5;
+
+    // Словарь: {коммит ID -> множество модулей, связанных с этим коммитом}
+    const neighborCommits = {};
+    adjacentNodes.forEach((node) => {
+      node.commits.forEach((commit) => {
+        if (!neighborCommits[commit.id]) {
+          neighborCommits[commit.id] = new Set();
+        }
+        neighborCommits[commit.id].add(node.module);
+      });
+    });
+
+    // Добавляем модуль текущего узла в соответственные коммиты
+    selectedNode.commits.forEach((commit) => {
+      if (!neighborCommits[commit.id]) {
+        neighborCommits[commit.id] = new Set();
+      }
+      neighborCommits[commit.id].add(nodeModule);
+    });
+
+    // Группировка коммитов по `author_team` и `author_name`
+    const groupedByTeam = d3.group(selectedNode.commits, (commit) => commit.author_team, (commit) => commit.author_name);
+
+    // Градиент для цвета фона
+    function calculateColor(moduleCount, maxModules) {
+      if (maxModules < moduleCount) {
+        maxModules = moduleCount;
+      }
+      const startColor = [240, 248, 255]; // Светло-голубой (#f0f8ff)
+      const endColor = [255, 99, 71]; // Красно-оранжевый (#ff6347)
+      const ratio = moduleCount / maxModules;
+      if (moduleCount === 1) {
+        return startColor;
+      }
+      const interpolatedColor = startColor.map((start, index) =>
+              Math.round(start + ratio * (endColor[index] - start))
+      );
+
+      return `#${interpolatedColor.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+    }
+
+    // Получаем тултип элемент
+    const tooltip = document.getElementById("tooltip");
+
+    // Отображение данных
+    groupedByTeam.forEach((authors, teamName) => {
+      // Создание информации для команды
+      const team = graph.teams.find((team) => team.name === teamName); // Находим команду по имени
+      if (team) {
+        // Используем общую функцию для отображения команды с тултипами
+        const teamDiv = createTeamElementWithTooltip(team.name, team.members);
+        commitList.appendChild(teamDiv);
+      } else {
+        // Случай, если перечисленные коммиты не связаны с известной командой
+        const teamDiv = document.createElement("div");
+        teamDiv.style.padding = "5px";
+        teamDiv.style.marginBottom = "8px";
+        teamDiv.style.borderRadius = "4px";
+        teamDiv.textContent = `[${teamName}]`;
+        commitList.appendChild(teamDiv);
+      }
+
+      authors.forEach((commits, authorName) => {
+        const authorDiv = document.createElement("div");
+        authorDiv.style.paddingLeft = "10px";
+        authorDiv.textContent = `${authorName} (${commits.length})`;
+
+        commitList.appendChild(authorDiv);
+
+        const commitUl = document.createElement("ul");
+        commitUl.className = "custom-list"; // Применяем класс для стилей
+
+        commits.forEach((commit) => {
+          const commitLi = document.createElement("li");
+
+          // Уникальные модули для коммита
+          const neighborModules = neighborCommits[commit.id];
+          const moduleCount = neighborModules.size;
+
+          console.log(
+                  "Коммит ID:", commit.id,
+                  "Модули:", [...neighborModules],
+                  "moduleCount:", moduleCount,
+                  "maxModules:", maxModules
+          );
+
+          // Рассчитываем цвет
+          const color = calculateColor(moduleCount, maxModules);
+          console.log("Применяем цвет:", color);
+
+          commitLi.style.backgroundColor = color;
+          commitLi.style.border = `1px solid ${color}`;
+          commitLi.style.padding = '5px';
+          commitLi.style.borderRadius = '5px';
+          commitLi.style.position = "relative";
+
+          const commitLink = document.createElement("a");
+          commitLink.href = `${graph.repository_url}/commit/${commit.id}`;
+          commitLink.textContent = `${commit.summary}`;
+          commitLink.target = "_blank";
+
+          commitLi.appendChild(commitLink);
+
+          // Добавляем тултип при наведении мыши
+          commitLi.addEventListener("mouseenter", (event) => {
+            const modulesList = [...neighborModules].join("<br>");
+            tooltip.innerHTML = `${modulesList}<br></br>${commit.summary}`;
+            tooltip.style.visibility = "visible";
+          });
+
+          commitLi.addEventListener("mousemove", (event) => {
+            const tooltipWidth = tooltip.offsetWidth;
+            const tooltipHeight = tooltip.offsetHeight;
+
+            const tooltipX = event.pageX - tooltipWidth - 10;
+            const tooltipY = event.pageY - tooltipHeight / 2;
+
+            tooltip.style.left = `${tooltipX}px`;
+            tooltip.style.top = `${tooltipY}px`;
+          });
+
+          commitLi.addEventListener("mouseleave", () => {
+            tooltip.style.visibility = "hidden";
+          });
+
+          commitUl.appendChild(commitLi);
+        });
+
+        commitList.appendChild(commitUl);
+      });
+    });
+  }
+  const teamFilter = document.getElementById("team-filter");
+  function updateSimulationForVisibleElements() {
+    // Обновляем данные симуляции с учетом видимых узлов и связей
+    //const visibleNodes = graph.nodes.filter(d => d3.select(`#node-${d.id}`).style("visibility") === "visible");
+    // const visibleLinks = graph.links.filter(d =>
+    //         d3.select(`#link-${d.source.id}-${d.target.id}`).style("visibility") === "visible"
+    // );
+
+    //simulation.nodes(visibleNodes);
+    //simulation.force("link").links(visibleLinks);
+    simulation.alpha(1).restart();
+  }
+  memberFilter = document.getElementById("member-filter");
+  memberFilter.addEventListener("change", () => {
+    const selectedTeam = teamFilter.value; // Получаем текущий выбор команды
+
+
+    filterGraphWithVisibility(selectedTeam);
+
+    updateSimulationForVisibleElements()
+    svgGroup.selectAll(".pie-chart")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    updateSimulationForVisibleElements()
+
+  });
+
+  teamFilter.addEventListener("change", () => {
+    const selectedTeam = teamFilter.value; // Получаем текущий выбор команды
+
+    filterGraphWithVisibility(selectedTeam);
+    updateSimulationForVisibleElements()
+    svgGroup.selectAll(".pie-chart")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    updateSimulationForVisibleElements()
+
+  });
+  function filterGraphWithVisibility(selectedTeam) {
+    if (selectedTeam === "all") {
+      // Показываем все узлы и связи
+      node.style("visibility", "visible");
+      link.style("visibility", "visible");
+      labels.style("visibility", "visible");
+      pieCharts.selectAll("g").style("visibility", "visible");
+      const memberFilter = document.getElementById("member-filter");
+      memberFilter.style.display = "none";
+      return;
+    }
+    const memberFilter = document.getElementById("member-filter");
+    memberFilter.style.display = "block";
+
+    const team =  graph.teams.find((team) => team.name === selectedTeam);
+    const members = team.members;
+    if(memberFilter.team !== selectedTeam) {
+      memberFilter.innerHTML = "";
+      // Добавляем команды в выпадающий список
+      const option = document.createElement("option");
+      option.value = "All";
+      option.textContent = "All";
+      memberFilter.appendChild(option);
+
+      members.forEach(member => {
+        const option = document.createElement("option");
+        option.value = member.name;
+        option.textContent = member.name || "Unknown";
+        memberFilter.appendChild(option);
+      });
+      memberFilter.team = selectedTeam;
+    }
+    selectedUser = memberFilter.value;
+    console.log("selectedUser:", selectedUser);
+    // Скрываем связи, если хотя бы один узел не в выбранной команде
+    link.style("visibility", d =>
+            (d.source.teams && d.source.teams.some(team => team.name === selectedTeam)) &&
+            (d.target.teams && d.target.teams.some(team => team.name === selectedTeam)) &&
+            ((d.source.users && d.source.users.some(user => user.name === selectedUser) || selectedUser === "All")) &&
+            ((d.target.users && d.target.users.some(user => user.name === selectedUser) || selectedUser === "All"))
+                    ? "visible"
+                    : "hidden"
+
+    );
+// Скрываем узлы, не принадлежащие выбранной команде
+    node.style("visibility", d =>
+            d.teams && d.teams.some(team => team.name === selectedTeam) &&
+            ((d.users && d.users.some(user => user.name === selectedUser) || selectedUser === "All")) ? "visible" : "hidden"
+    );
+    // Скрываем или отображаем метки узлов
+    labels.style("visibility", d =>
+            d.teams && d.teams.some(team => team.name === selectedTeam) &&
+            ((d.users && d.users.some(user => user.name === selectedUser) || selectedUser === "All")) ? "visible" : "hidden"
+    );
+
+    pieCharts.selectAll("g").style("visibility", d =>
+                    d.teams && d.teams.some(team => team.name === selectedTeam) &&
+                    ((d.users && d.users.some(user => user.name === selectedUser) || selectedUser === "All")) ? "visible" : "hidden"
+            );
+  }
+
+  const node = svgGroup.append("g")
+          .attr("class", "nodes")
+          .selectAll("circle")
+          .data(graph.nodes)
+          .enter()
+          .append("circle")
+          .attr("r", d => nodeRadiusScale(d.weight)) // Радиус привязан к весу
+          .attr("fill", d => d.color)
+          .attr("fill-opacity", d => d.commit_time_normalized * d.commit_time_normalized || 1)
+          .attr("stroke", "#ffffff")
+          .attr("stroke-opacity", d => d.commit_time_normalized * d.commit_time_normalized|| 1)
+          .attr("stroke-width", 1.5)
+          .on("click", (event, d) => {
+            event.stopPropagation();
+            fileInfo.textContent = d.full_path;
+            highlightConnectedNodes(d.id); // Подсвечиваем соседей
+            // Генерация ссылок на коммиты
+            updateCommitToolbar(d);
+
+
+          }).call(d3.drag()
+                  .on("start", dragStarted)
+                  .on("drag", dragged)
+                  .on("end", dragEnded));
+  const pieCharts = svgGroup.append("g").attr("class", "pie-charts");
+
+
+  const commitTimeCheckbox = document.getElementById("enable-commit-time");
+  let useCommitNormalization = commitTimeCheckbox.checked; // Переменная состояния чекбокса
+
+  commitTimeCheckbox.addEventListener("change", () => {
+    useCommitNormalization = commitTimeCheckbox.checked; // Обновляем состояние
+    updateGraphStyles(); // Перерисовываем граф с учетом состояния
+  });
+
+  // Переменная состояния чекбокса
+  const pieChartCheckbox = document.getElementById("enable-pie-chart");
+  let isPieChartEnabled = pieChartCheckbox.checked;
+
+  // Цвета для диаграммы (по количеству команд)
+  const pieColorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+  // Функция для отрисовки круговых диаграмм
+  function updatePieCharts() {
+    if (!isPieChartEnabled) {
+      svgGroup.select(".pie-charts").selectAll("g").remove(); // Удаляем диаграммы
+      return;
+    }
+
+    const pie = d3.pie().value(d => d.value); // Вычисляем углы секторов
+    const arc = d3.arc().innerRadius(0).outerRadius(d => d.data.outerRadius); // Окружность диаграммы
+
+    // Выбираем или создаём группу для диаграмм
+    const pieChartsGroup = svgGroup.select(".pie-charts");
+    if (pieChartsGroup.empty()) {
+      svgGroup.append("g").attr("class", "pie-charts");
+    }
+
+    // Привязываем диаграммы к данным узлов
+    const pieCharts = svgGroup.select(".pie-charts")
+            .selectAll("g")
+            .data(graph.nodes, d => d.id);
+
+    // Создаём новые группы для диаграмм
+    const pieEnter = pieCharts.enter()
+            .append("g")
+            .attr("class", "pie-chart")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+
+    pieEnter.merge(pieCharts) // Объединяем новые и существующие диаграммы
+            .attr("transform", d => `translate(${d.x}, ${d.y})`)
+            .selectAll("path")
+            .data(d => {
+              if (d.teams && d.teams.length > 0) {
+                const contributionData = d.teams.map(team => ({
+                  name: team.name,
+                  value: team.commits,
+                  outerRadius: nodeRadiusScale(d.weight) - 3, // Диаграмма чуть меньше радиуса узла
+                  commit_time_normalized: d.commit_time_normalized, // Для прозрачности
+                }));
+                return pie(contributionData);
+              }
+              return [];
+            })
+            .join("path")
+            .attr("d", arc)
+            .attr("fill", d => generateTeamColor(d.data.name)) // Используем функцию для выбора цвета
+            .attr("fill-opacity", d => useCommitNormalization ? d.data.commit_time_normalized || 1 : 1) // Прозрачность для секторов
+            .attr("stroke", "#ffffff")
+            .attr("stroke-opacity", d => useCommitNormalization ? d.data.commit_time_normalized || 1 : 1) // Прозрачность обводки
+            .attr("stroke-width", 0.5)
+            .attr("pointer-events", "none"); // Не блокируем события
+
+
+    // Удаляем лишние диаграммы
+    pieCharts.exit().remove();
+  }
+  pieChartCheckbox.addEventListener("change", () => {
+    isPieChartEnabled = pieChartCheckbox.checked;
+    updatePieCharts(); // Перерисовываем диаграммы
+    svgGroup.selectAll(".pie-chart")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    const selectedTeam = teamFilter.value; // Получаем текущий выбор команды
+    filterGraphWithVisibility(selectedTeam);
+    updateSimulationForVisibleElements()
+  });
+  // Найдите ваш тултип по ID
+  const tooltip = document.getElementById("tooltip");
+
+  // Событие: показать тултип при наведении
+  node.on("mouseover", (event, d) => {
+    if (event.active) {
+      tooltip.style.visibility = "hidden";
+      return;
+    }
+    const { users, teams } = d;
+
+    // Формируем список авторов (сортировка по числу коммитов)
+    let authorsInfo = `<strong>Top Authors:</strong>`;
+    if (users && users.length > 0) {
+      // Сортируем по количеству коммитов в порядке убывания
+      const sortedUsers = [...users].sort((a, b) => b.commits - a.commits);
+
+      sortedUsers.forEach(({ name, commits }) => {
+        authorsInfo += `<br>${name}: ${commits} commits`;
+      });
+    } else {
+      authorsInfo += `<br>No data`;
+    }
+
+// Формируем список команд (сортировка по числу коммитов)
+    let teamsInfo = `<strong>Teams:</strong>`;
+    if (teams && teams.length > 0) {
+      // Сортируем по количеству коммитов в порядке убывания
+      const sortedTeams = [...teams].sort((a, b) => b.commits - a.commits);
+
+      sortedTeams.forEach(({ name, commits }) => {
+        teamsInfo += `<br>${name}: ${commits} commits`;
+      });
+    } else {
+      teamsInfo += `<br>No data`;
+    }
+    // Заполняем тултип информацией
+    tooltip.innerHTML = `
+    <div>
+      <strong>${d.name}</strong><br>
+      <em>Module:</em> ${d.module}<br>
+      ${authorsInfo}<br><br>
+      ${teamsInfo}
+    </div>
+  `;
+
+    // Делаем тултип видимым
+    tooltip.style.visibility = "visible";
+  });
+
+  // Событие: перемещать тултип вместе с мышью
+  node.on("mousemove", (event) => {
+    if (event.active) {
+      tooltip.style.visibility = "hidden";
+      return;
+    }
+    const tooltipHeight = tooltip.offsetHeight;
+
+    const tooltipX = event.pageX + 15; // Смещаем вправо от мыши
+    const tooltipY = event.pageY - tooltipHeight / 2; // Центрируем относительно мыши
+
+    tooltip.style.left = `${tooltipX}px`;
+    tooltip.style.top = `${tooltipY}px`;
+  });
+
+  // Событие: скрыть тултип, если уходим с области ноды
+  node.on("mouseleave", () => {
+    tooltip.style.visibility = "hidden";
+  });
+
+  // Масштаб для шрифта лабелов
+  const labelFontScale = d3.scaleLinear()
+          .domain([minWeight, maxWeight])
+          .range([3, 14]); // Размер шрифта (пиксели)
+
+  // Визуализация меток (лабелов)
+  const labels = svgGroup.append("g")
+          .attr("class", "labels")
+          .selectAll("text")
+          .data(graph.nodes)
+          .enter()
+          .append("text")
+          .text(d => d.name)
+          .style("font-size", d => `${labelFontScale(d.weight)}px`) // Размер текста также привязан к весу
+          .style("display", d => nodeRadiusScale(d.weight) >= minNodeVisibleSize ? "block" : "none") // Скрывать для слишком маленьких узлов
+          .attr("pointer-events", "none")
+          .attr("text-anchor", "middle"); // Центрирование текста
+
+  simulation.on("tick", () => {
+    link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
+    node
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
+
+    labels
+            .attr("x", d => d.x)
+            .attr("y", d => d.y);
+    if (isPieChartEnabled) {
+      svgGroup.selectAll(".pie-chart")
+              .attr("transform", d => `translate(${d.x}, ${d.y})`);
+    }
+  });
+  // Логика обновления графа при изменении чекбокса
+  function updateGraphStyles() {
+    // Обновляем стиль узлов
+    node
+            .attr("fill-opacity", d => useCommitNormalization ? d.commit_time_normalized * d.commit_time_normalized || 1 : 1)
+            .attr("stroke-opacity", d => useCommitNormalization ? d.commit_time_normalized * d.commit_time_normalized || 1 : 1);
+
+    // Обновляем стиль связей
+    link
+            .attr("stroke-opacity", d => useCommitNormalization ? 0.6 * d.commit_time_normalized * d.commit_time_normalized || 1 : 1);
+    labels.style("display", d => nodeRadiusScale(d.weight) >= minNodeVisibleSize ? "block" : "none");
+    node
+            .attr("fill", d => d.color) // Восстанавливаем исходный цвет узлов
+            .attr("stroke", "#ffffff"); // Восстанавливаем обводочный цвет
+
+    link
+            .attr("stroke", "#999") // Восстанавливаем цвет связей
+            .attr("stroke-width", d => Math.sqrt(d.weight)); // Восстанавливаем толщину связей
+  }
+
+  // Вызовем updateGraphStyles сразу, чтобы всё пересчиталось на старте
+  updateGraphStyles();
+  updateCommitToolbar();
+  // Логика подсветки соседей и затемнения остального
+  function highlightConnectedNodes(nodeId) {
+    const connectedNodes = new Set(graph.links
+            .filter(link => link.source.id === nodeId || link.target.id === nodeId)
+            .reduce((acc, link) => acc.concat([link.source.id, link.target.id]), [nodeId]));
+
+    // Обновляем стиль узлов
+    node
+            .attr("fill", d => connectedNodes.has(d.id) ? d.color: "#d3d3d3") // Тусклый цвет для несоседних узлов
+            .attr("stroke-opacity", 1)
+            .attr("stroke", d => connectedNodes.has(d.id) ? "red" : "#aaaaaa"); // Тусклый обводочный цвет
+
+    // Обновляем стиль связей
+    link
+            .attr("stroke", d => connectedNodes.has(d.source.id) && connectedNodes.has(d.target.id) ? "red" : "#d3d3d3") // Тусклый цвет связи
+            .attr("stroke-width", d => connectedNodes.has(d.source.id) && connectedNodes.has(d.target.id) ? Math.sqrt(d.weight) : 1); // Уменьшаем толщину тусклых связей
+    labels
+            .style("display",d => connectedNodes.has(d.id) ? "block" : "none")
+  }
+
+  // Снятие выделения при клике на пустую область
+  svg.on("click", () => resetHighlight());
+
+  // Сброс всех подсветок
+  function resetHighlight() {
+    updateGraphStyles()
+    fileInfo.textContent = "Click on a node to see the full path here.";
+    updateCommitToolbar();
+  }
+
+  // Логика поиска файла
+  fileSearchInput.addEventListener("input", () => {
+    const searchValue = fileSearchInput.value.toLowerCase();
+    node.style("opacity", d => d.name.toLowerCase().includes(searchValue) ? 1 : 0.2);
+    labels.style("opacity", d => d.name.toLowerCase().includes(searchValue) ? 1 : 0.2);
+  });
+
+  // Логика обновления видимости названий узлов
+  minNodeSizeInput.addEventListener("input", () => {
+    minNodeVisibleSize = parseInt(minNodeSizeInput.value);
+    minNodeSizeValue.textContent = minNodeVisibleSize;
+    updateGraphStyles()
+  });
+
+
+  thresholdInput.addEventListener("input", () => {
+    threshold = parseFloat(thresholdInput.value);
+    thresholdText.value = threshold.toFixed(1);
+    updateThreshold();
+  });
+
+  function updateThreshold() {
+    link.style("visibility", d => d.weight >= threshold ? "visible" : "hidden");
+    simulation.force("link").links(graph.links.filter(d => d.weight >= threshold));
+    simulation.alpha(1).restart();
+  }
+</script>
+</body>
+</html>
