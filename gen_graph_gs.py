@@ -1,11 +1,13 @@
 import sqlite3
 import json
 import os
+import sys
 import colorsys
 import subprocess
 from collections import Counter
 from datetime import datetime, timedelta
 import re
+from deserializer import JsonDeserializer
 
 def generate_new_color(index):
     """Генерирует уникальный цвет для верхнеуровневых модулей."""
@@ -85,6 +87,304 @@ def get_repository_url():
         # Если команда завершилась ошибкой (например, это не Git-репозиторий)
         print("Не удалось получить URL репозитория. Убедитесь, что это папка Git-репозитория.")
         return None
+    
+
+def parse_datetime(date_str):
+    """Parse datetime string in various formats."""
+    try:
+        # Try ISO format first
+        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+    except ValueError:
+        try:
+            # Try parsing format like '2025-04-11 17:21:53 +0200'
+            # Split into date+time and timezone
+            datetime_part, tz = date_str.rsplit(' ', 1)
+            # Parse the main part
+            dt = datetime.strptime(datetime_part, '%Y-%m-%d %H:%M:%S')
+            # Handle timezone offset
+            if tz.startswith('+'):
+                hours = int(tz[1:3])
+                dt = dt - timedelta(hours=hours)  # Adjust for timezone
+            elif tz.startswith('-'):
+                hours = int(tz[1:3])
+                dt = dt + timedelta(hours=hours)  # Adjust for timezone
+            return dt
+        except ValueError:
+            # If all else fails, try basic format
+            return datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
+
+
+def query_graph_data_new(database, since, until):
+    """Запрашивает данные для графа из базы данных."""
+    # Формируем условия для фильтрации по времени
+    time_conditions = []
+    if since:
+        time_conditions.append(f"commit_date >= '{since}'")
+    if until:
+        time_conditions.append(f"commit_date <= '{until}'")
+    
+    # Объединяем условия в SQL
+    time_filter = " AND ".join(time_conditions) if time_conditions else ""
+
+    conn = sqlite3.connect(database)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    # Запрашиваем все коммиты и файлы с учетом фильтра по времени
+    cursor.execute(f"""
+        SELECT commit_id, filename
+        FROM commit_files
+        JOIN commits ON commit_files.commit_id = commits.id
+        WHERE 1 = 1 {f"AND {time_filter}" if time_filter else ""}
+    """)
+
+    rows = cursor.fetchall()
+
+    file_map = {}
+    edges = {}
+
+    commit_files_map = {}
+    for row in rows:
+        # Сокращаем хеш коммита до 15 символов
+        commit_id = row["commit_id"][:15]
+        filename = row["filename"]
+
+        if commit_id not in commit_files_map:
+            commit_files_map[commit_id] = []
+        commit_files_map[commit_id].append(filename)
+
+    commits_with_matching_files = set(commit_files_map.keys())
+    # Подсчитываем количество файлов в каждом модуле
+    module_file_counts = {}
+
+    for commit_id, files in commit_files_map.items():
+        if commit_id not in commits_with_matching_files:
+            continue
+
+        if len(files) > max_files_per_commit:
+            continue
+
+        for file in files:
+            # Определить модуль для файла
+            module_path = None
+
+            # Если ничего не найдено, назначаем модуль "Unknown"
+            if not module_path:
+                module_path = "Unknown"
+
+            # Определение цвета файла
+            node_color = "green"  # Цвет остаётся зелёным для файлов в папках `--folders`
+            module_name = "Current"  # Все файлы из переданных папок считаются модулем 'Current'
+
+            if module_name not in module_file_counts:
+                module_file_counts[module_name] = 0
+            module_file_counts[module_name] += 1
+            # Если файла ещё нет в file_map, добавляем его
+            if file not in file_map:
+                file_map[file] = {
+                    "id": len(file_map),
+                    "name": os.path.basename(file),
+                    "full_path": file,
+                    "folder": "/".join(file.split("/")[:-1]),
+                    "weight": 1.0,
+                    "color": node_color,  # Цвет на основе условия
+                    "module": module_name,  # Чтобы можно было использовать при фильтрации в легенде
+                    "commits": []  # Используем список для хранения commit_id
+                }
+
+            # Добавляем текущий сокращённый commit_id в список коммитов файла
+            file_map[file]["commits"].append(commit_id)
+
+    for commit_id, files in commit_files_map.items():
+        if commit_id not in commits_with_matching_files:
+            continue
+
+        if len(files) > max_files_per_commit:
+            continue
+        module_commit_impact = {}
+        for i in range(len(files)):
+            for j in range(i + 1, len(files)):
+                file_a = files[i]
+                file_b = files[j]
+                edge_key = tuple(sorted([file_a, file_b]))
+
+                if edge_key not in edges:
+                    edges[edge_key] = {
+                        "source": file_map[file_a]["id"],
+                        "target": file_map[file_b]["id"],
+                        "weight": 1.0
+                    }
+                edges[edge_key]["weight"] += 1
+
+                if file_a not in module_commit_impact:
+                    module_commit_impact[file_a] = 1.0
+                if file_b not in module_commit_impact:
+                    module_commit_impact[file_b] = 1.0
+
+                file_map[file_a]["weight"] += module_commit_impact[file_a]
+                file_map[file_b]["weight"] += module_commit_impact[file_b]
+                module_commit_impact[file_a] *= 0.8
+                module_commit_impact[file_b] *= 0.8
+
+    conn.close()
+
+    nodes = []
+    for file_data in file_map.values():
+        nodes.append(file_data)
+
+    links = [edge for edge in edges.values() if edge["weight"] >= connection_threshold]
+
+    # Извлечем все commit_ids и их время
+    conn = sqlite3.connect(database)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(f"""
+            SELECT id, commit_date, author_name, summary
+            FROM commits
+            WHERE 1 = 1 {f"AND {time_filter}" if time_conditions else ""}
+        """)
+    commit_rows = cursor.fetchall()
+
+    commit_times = []
+    teams_data = {}  # Собираем команды во временный словарь
+
+    for row in commit_rows:
+        commit_date = row["commit_date"]
+        author_name = row["author_name"]
+
+        try:
+            commit_time = parse_datetime(commit_date)
+            commit_times.append(commit_time)
+        except ValueError:
+            continue
+
+        # Инициализируем команду, если её ещё нет
+        team_name = "Unknown"
+        if team_name not in teams_data:
+            teams_data[team_name] = set()
+
+        # Добавляем участника в соответствующую команду
+        if author_name:
+            teams_data[team_name].add(author_name)
+
+    # Заполняем teams_list
+    teams_list = [
+        {
+            "name": team_name,
+            "members": [{"name": member_name} for member_name in members]
+        }
+        for team_name, members in teams_data.items()
+    ]
+
+    # Закрываем подключение
+    conn.close()
+
+    if commit_times:
+        first_commit_time = min(commit_times)
+        last_commit_time = max(commit_times)
+        start_opacity = 0.3
+        # Нормализуем время в диапазон [0.1, 1]
+        def normalize_time(commit_time):
+            normalized = (commit_time - first_commit_time).total_seconds() / (
+                    last_commit_time - first_commit_time).total_seconds()
+            return start_opacity + (normalized * (1.0 - start_opacity))
+
+        for node in nodes:
+            if node["commits"]:
+                # Берём последние изменения для файла
+                filtered_rows = [row for row in commit_rows if row["id"][:15] in node["commits"]]
+
+                latest_commit_time = max(
+                    parse_datetime(row["commit_date"])
+                    for row in commit_rows if row["id"][:15] in node["commits"]
+                )
+                author_commit_counts = Counter(row["author_name"] for row in filtered_rows)
+                team_commit_counts = Counter({"Unknown": len(filtered_rows)})  # Count all commits as "Unknown" team
+                node["commit_time_normalized"] = normalize_time(latest_commit_time)
+                node["commits"] = [
+                    {
+                        "id": row["id"][:15],  # Сокращённый хэш коммита
+                        "author_name": row["author_name"],  # Имя автора
+                        "author_team": "Unknown",  # Команда автора
+                        "summary": row["summary"]
+                    }
+                    for row in filtered_rows
+                ]
+
+                node["users"] = [{"name": name, "commits": count} for name, count in author_commit_counts.items()]
+                node["teams"] = [{"name": name, "commits": count} for name, count in team_commit_counts.items()]
+
+    # Подготовим данные для легенды
+    used_modules = {file_map[file]["folder"] for file in file_map}
+
+    # Для каждого link добавляем нормализованное время коммита
+    for link in links:
+        # Получаем исходный и целевой файлы
+        source_file = next(node for node in nodes if node["id"] == link["source"])
+        target_file = next(node for node in nodes if node["id"] == link["target"])
+
+        # Если оба узла имеют связанные коммиты
+        if source_file["commits"] and target_file["commits"]:
+            # Находим общие коммиты между файлами
+            source_commits = set(commit["id"] for commit in source_file["commits"])
+            target_commits = set(commit["id"] for commit in target_file["commits"])
+            common_commits = source_commits & target_commits
+
+            # Если есть хотя бы один общий коммит
+            if common_commits:
+                # Выбираем последнее время из общего набора
+                latest_common_commit_time = max(
+                    parse_datetime(row["commit_date"])
+                    for row in commit_rows if row["id"][:15] in common_commits
+                )
+
+                # Нормализуем время
+                link["commit_time_normalized"] = normalize_time(latest_common_commit_time)
+            else:
+                # Если общих коммитов нет, устанавливаем минимальное значение
+                link["commit_time_normalized"] = start_opacity
+        else:
+            # Если у одного из файлов нет коммитов, минимальное значение
+            link["commit_time_normalized"] = start_opacity
+
+    # Добавляем модули в легенду, только если они реально использовались
+    used_module_legend = []
+
+    # Сортировка по количеству файлов
+    used_module_legend.sort(key=lambda x: x["file_count"], reverse=True)
+
+    # Если есть папки из параметра --folders, добавляем их в начало
+    module_legend = [{"module": "Current", "color": "green", "file_count": 0}]
+    module_legend.extend(used_module_legend)
+
+    # Создаем карту commit_time_map с временем для каждого укороченного commit_id
+    commit_time_map = {}
+    for row in commit_rows:
+        commit_id = row["id"][:15]  # Урезаем commit_id до 15 символов
+        try:
+            # Конвертируем `commit_date` в объект datetime
+            commit_time = parse_datetime(row["commit_date"])
+            commit_time_map[commit_id] = commit_time
+        except ValueError:
+            # Если есть ошибки в формате времени, просто пропускаем
+            continue
+
+    # Сортируем коммиты в каждом узле на основании commit_time_map
+    for node in nodes:
+        if node["commits"]:
+            node["commits"].sort(
+                key=lambda commit: commit_time_map.get(commit["id"], datetime.min),
+                reverse=True  # Сортировка от самого нового к старому
+            )
+
+    return {
+        "nodes": nodes,
+        "links": links,
+        "modules": module_legend,
+        "repository_url": "Unknown",
+        "teams": teams_list  # Добавили команды
+    }
+
 
 def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, folders=None,
                      modules_file='modules.csv', repository_url="None", since=None, until=None, team_filter=None):
@@ -267,8 +567,7 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
         author_name = row["author_name"]
 
         try:
-            normalized_author_when = author_when.replace('Z', '+00:00')
-            commit_time = datetime.fromisoformat(normalized_author_when)
+            commit_time = parse_datetime(author_when)
             commit_times.append(commit_time)
         except ValueError:
             continue
@@ -294,7 +593,7 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
         for team_name, members in teams_data.items()
     ]
 
-# Закрываем подключение
+    # Закрываем подключение
     conn.close()
 
     if commit_times:
@@ -313,7 +612,7 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
                 filtered_rows = [row for row in commit_rows if row["id"][:15] in node["commits"]]
 
                 latest_commit_time = max(
-                    datetime.fromisoformat(row["author_when"].replace('Z', '+00:00'))
+                    parse_datetime(row["author_when"])
                     for row in commit_rows if row["id"][:15] in node["commits"]
                 )
                 author_commit_counts = Counter(row["author_name"] for row in filtered_rows)
@@ -335,7 +634,6 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
     # Подготовим данные для легенды
     used_modules = {file_map[file]["folder"] for file in file_map}
 
-
     # Для каждого link добавляем нормализованное время коммита
     for link in links:
         # Получаем исходный и целевой файлы
@@ -345,17 +643,15 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
         # Если оба узла имеют связанные коммиты
         if source_file["commits"] and target_file["commits"]:
             # Находим общие коммиты между файлами
-            common_commits = (
-                    {commit["id"] for commit in source_file["commits"]} &
-                    {commit["id"] for commit in target_file["commits"]}
-            )
-
+            source_commits = set(commit["id"] for commit in source_file["commits"])
+            target_commits = set(commit["id"] for commit in target_file["commits"])
+            common_commits = source_commits & target_commits
 
             # Если есть хотя бы один общий коммит
             if common_commits:
                 # Выбираем последнее время из общего набора
                 latest_common_commit_time = max(
-                    datetime.fromisoformat(row["author_when"].replace('Z', '+00:00'))
+                    parse_datetime(row["author_when"])
                     for row in commit_rows if row["id"][:15] in common_commits
                 )
 
@@ -395,9 +691,9 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
         commit_id = row["id"][:15]  # Урезаем commit_id до 15 символов
         try:
             # Конвертируем `author_when` в объект datetime
-            commit_time = datetime.fromisoformat(row["author_when"].replace('Z', '+00:00'))
+            commit_time = parse_datetime(row["author_when"])
             commit_time_map[commit_id] = commit_time
-        except (ValueError, TypeError):
+        except ValueError:
             # Если есть ошибки в формате времени, просто пропускаем
             continue
 
@@ -408,8 +704,6 @@ def query_graph_data(database, connection_threshold=1, max_files_per_commit=21, 
                 key=lambda commit: commit_time_map.get(commit["id"], datetime.min),
                 reverse=True  # Сортировка от самого нового к старому
             )
-
-
 
     return {
         "nodes": nodes,
@@ -467,7 +761,50 @@ def parse_human_time(human_time):
         return current_time - timedelta(days=value * 365)
 
     raise ValueError(f"Неизвестный формат времени: {unit}")
-def main(database="git_log.db", template="template.html", output_html="graph.html", connection_threshold=1,
+
+def gen_report_new(
+        database,
+        template,
+        output_html,
+        connection_threshold,
+        max_files_per_commit,
+        until,
+        since):
+    
+    # print(module)
+    # print(output_file)
+    print(since)
+    print(until)    
+
+    graph_data = query_graph_data_new(database, until, since)
+    generate_html_with_improvements(graph_data, template, output_html)
+
+    # Преобразуем "человеческие" строки для `since` и `until` в объекты datetime
+    # if since:
+    #     if "ago" in since.lower():
+    #         since = parse_human_time(since)
+    #     else:
+    #         since = datetime.strptime(since, "%Y-%m-%d %H:%M:%S")
+    #     since = since.strftime('%Y-%m-%d %H:%M:%S')  # Конвертируем в строку для SQLite
+
+    # if until:
+    #     if "ago" in until.lower():
+    #         until = parse_human_time(until)
+    #     else:
+    #         until = datetime.strptime(until, "%Y-%m-%d %H:%M:%S")
+    #     until = until.strftime('%Y-%m-%d %H:%M:%S')  # Конвертируем в строку для SQLite
+
+    # if not repository_url:
+    #     repository_url = get_repository_url()
+    # if not repository_url:
+    #     print("Предупреждение: Не удалось определить URL Git-репозитория. Укажите его явно через --repository-url.")
+    #     repository_url = "Unknown"
+
+    # graph_data = query_graph_data(database, connection_threshold, max_files_per_commit, folders,
+    #                               modules_file, repository_url, since, until, team)
+    # generate_html_with_improvements(graph_data, template, output_html)
+
+def gen_report(database="git_log.db", template="template.html", output_html="graph.html", connection_threshold=1,
          max_files_per_commit=21, folders=None, modules_file='modules.csv', repository_url=None,
          since=None, until=None, team=None
          ):
@@ -500,34 +837,66 @@ def main(database="git_log.db", template="template.html", output_html="graph.htm
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Генерация интерактивного графа.")
-    parser.add_argument("--database", default="git_log.db", help="Путь к базе данных SQLite")
-    parser.add_argument("--template", default="template.html", help="HTML-шаблон")
-    parser.add_argument("--output", default="reports/index.html", help="Файл для сохранения HTML")
-    parser.add_argument("--threshold", type=int, default=1, help="Минимальное количество связей для рёбер")
-    parser.add_argument("--max-files", type=int, default=21,
-                        help="Максимальное количество файлов в коммите для включения в анализ")
-    parser.add_argument("--folders", nargs="*", default=None, help="Учитывать только файлы из указанных папок")
-    parser.add_argument("--modules-file", default="modules.csv", help="Файл с определениями модулей")
-    parser.add_argument("--team", help="Имя команды для фильтрации файлов.")
-    parser.add_argument("--repository-url", default=None,
-                    help="URL репозитория (если не указано, будет извлечён автоматически)")
-    # Добавляем поддержку аргументов since и until
-    parser.add_argument("--since", default=None,
-                        help="Фильтровать коммиты начиная с указанной даты (пример: 'last year', '3 months ago', '2023-01-01')")
-    parser.add_argument("--until", default=None,
-                        help="Фильтровать коммиты до указанной даты (пример: 'yesterday', '2 weeks ago', '2023-10-01')")
+    # parser = argparse.ArgumentParser(description="Генерация интерактивного графа.")
+    # parser.add_argument("--database", default="git_log.db", help="Путь к базе данных SQLite")
+    # parser.add_argument("--template", default="template.html", help="HTML-шаблон")
+    # parser.add_argument("--output", default="reports/index.html", help="Файл для сохранения HTML")
+    # parser.add_argument("--threshold", type=int, default=1, help="Минимальное количество связей для рёбер")
+    # parser.add_argument("--max-files", type=int, default=21,
+    #                     help="Максимальное количество файлов в коммите для включения в анализ")
+    # parser.add_argument("--folders", nargs="*", default=None, help="Учитывать только файлы из указанных папок")
+    # parser.add_argument("--modules-file", default="modules.csv", help="Файл с определениями модулей")
+    # parser.add_argument("--team", help="Имя команды для фильтрации файлов.")
+    # parser.add_argument("--repository-url", default=None,
+    #                 help="URL репозитория (если не указано, будет извлечён автоматически)")
+    # # Добавляем поддержку аргументов since и until
+    # parser.add_argument("--since", default=None,
+    #                     help="Фильтровать коммиты начиная с указанной даты (пример: 'last year', '3 months ago', '2023-01-01')")
+    # parser.add_argument("--until", default=None,
+    #                     help="Фильтровать коммиты до указанной даты (пример: 'yesterday', '2 weeks ago', '2023-10-01')")
 
-    args = parser.parse_args()
-    main(
-        database=args.database,
-        template=args.template,
-        output_html=args.output,
-        connection_threshold=args.threshold,
-        max_files_per_commit=args.max_files,
-        folders=args.folders, modules_file=args.modules_file,
-        repository_url=args.repository_url,
-        since=args.since,
-        until=args.until,
-        team=args.team
+    # args = parser.parse_args()
+
+
+    database="git_history.db"
+    template="template_gs.html"
+    output_html="graph_gs.html"
+    connection_threshold=1
+    max_files_per_commit=21
+    # folders=None
+    # modules_file='modules.csv'
+    # repository_url=None
+    # since=None
+    since = "2025-04-12"
+    until = "2025-04-01"
+
+    try:
+        project = JsonDeserializer.deserialize("result.json")
+        print(f"Loaded project with {len(project.modules)} modules")
+    except Exception as e:
+        print(f"Error loading project: {e}")
+        sys.exit(1)
+
+    gen_report_new(
+        database = database,
+        template = template,
+        output_html = output_html,
+        connection_threshold = connection_threshold,
+        max_files_per_commit = max_files_per_commit,
+        until = until,
+        since = since
     )
+
+    # gen_report(
+    #     database = database,
+    #     template = template,
+    #     output_html = output_html,
+    #     connection_threshold = connection_threshold,
+    #     max_files_per_commit = max_files_per_commit,
+    #     folders = folders,
+    #     modules_file = modules_file,
+    #     repository_url = repository_url,
+    #     since = since,
+    #     until=args.until,
+    #     team=args.team
+    # )

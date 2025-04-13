@@ -4,7 +4,7 @@ import sqlite3
 import sys
 from pathlib import Path
 from argparse import ArgumentParser
-from gen_graph import main  # Предполагается, что `main` – это основная функция из `gen_graph.py`
+from gen_graph_gs import gen_report_new  # Предполагается, что `main` – это основная функция из `gen_graph.py`
 
 from deserializer import JsonDeserializer
 from project import Project
@@ -52,7 +52,6 @@ def process_modules_file(project: Project, output_dir: str, since: str, until: s
     Args:
         project: Объект Project с модулями
         output_dir: Директория для сохранения отчетов
-        git_root: Корневая директория Git-репозитория
         since: Начальная дата для фильтрации коммитов
         until: Конечная дата для фильтрации коммитов
     """
@@ -83,13 +82,24 @@ def process_modules_file(project: Project, output_dir: str, since: str, until: s
         print(f"Файлов: {len(module.files)}")
         print(f"Подмодулей: {len(module.submodules or [])}")
         
-        # Вызываем функцию main из gen_graph_gs.py для генерации отчета
-        # main(
-        #     folders=module.paths,  # Папки для анализа
-        #     output_html=output_file,  # Путь к файлу отчета
-        #     since=since,  # Фильтрация по времени
-        #     until=until  # Фильтрация по времени
-        # )
+        # Логируем входные параметры для gen_report_new
+        print("\nПараметры для генерации отчета:")
+        print(f"  - Модуль: {module.name}")
+        print(f"  - Пути: {module.paths}")
+        print(f"  - Выходной файл: {output_file}")
+        print(f"  - Период: с {since} по {until}")
+        
+        try:
+            # Вызываем функцию gen_report_new для генерации отчета
+            gen_report_new(
+                module=module,  # Объект модуля
+                output_html=output_file,  # Путь к файлу отчета
+                since=since,  # Фильтрация по времени
+                until=until  # Фильтрация по времени
+            )
+            print("Отчет успешно сгенерирован")
+        except Exception as e:
+            print(f"Ошибка при генерации отчета: {e}")
         
         # Рекурсивно обрабатываем подмодули
         if module.submodules:
